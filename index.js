@@ -1,146 +1,85 @@
-const express = require('express')
-const app = express()
-const port = 3001
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+require("dotenv").config();
 
-const bodyParser = require('body-parser');
+const MongoClient = require("mongodb").MongoClient;
+const ObjectId = require("mongodb").ObjectId;
+
+const app = express();
+
+app.use(cors());
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 
-const cors = require('cors')
-app.use(cors())
+const port = 5000;
 
-require('dotenv').config()
-
-const ObjectId = require('mongodb').ObjectId;
-
-
-const MongoClient = require('mongodb').MongoClient;
-
-const uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.emqen.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.emqen.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
-client.connect(err => {
-    const service_collection = client.db("db_creative_agency").collection("coll_services");
-    const admin_email_collection = client.db("db_creative_agency").collection("coll_admin_email");
 
-    const order_collection = client.db("db_creative_agency").collection("coll_orders");
-    const review_collection = client.db("db_creative_agency").collection("coll_reviews");
-    console.log("db connected")
+client.connect((err) => {
+	const serviceCollection = client.db("creative").collection("creativeColl");
+	const orderCollection = client.db("creative").collection("creativeColl");
+	const reviewCollection = client.db("creative").collection("creativeColl");
+	console.log("DB connected 🚀");
 
+	/* API: Getting Services Data on home page */
+	app.get("/home/services", (req, res) => {
+		serviceCollection.find({}).toArray((err, docs) => {
+			res.send(docs);
+		});
+	});
 
-    //---------- total 12 apis --------
+	/* API: Getting Review Data on home page */
+	app.get("/home/reviews", (req, res) => {
+		reviewCollection.find({}).toArray((err, docs) => {
+			res.send(docs);
+		});
+	});
 
+	/* API: Add Review */
+	app.post("/addReview", (req, res) => {
+		const newReview = req.body;
+		reviewCollection.insertOne(newReview).then((result) => {
+			console.log(result, "Added new review ✅");
+			res.send(result.insertedCount > 0);
+		});
+	});
 
-    app.post('/addNewService', (req, res) => { //---------------- add New Service
-        service_collection.insertOne(req.body)
-            .then(result => {
-                res.send(result.insertedCount > 0)
-            })
-    })
-    app.post('/addNewAdmin', (req, res) => { // ------------------ add New Admin
-        admin_email_collection.insertOne(req.body)
-            .then(result => {
-                res.send(result.insertedCount > 0)
-            })
-    })
+	/* API: Add order */
+	app.post("/addOrder", (req, res) => {
+		const newOrder = req.body;
+		orderCollection.insertOne(newOrder).then((result) => {
+			console.log(result, "Added new order ✅");
+			res.send(result.insertedCount > 0);
+		});
+	});
 
-    app.get('/getAdminEmails', (req, res) => { //---------------- get all admin emails
-        admin_email_collection.find({})
-            .toArray((err, documents) => {
-                res.send(documents)
-            })
-    })
+	/* API: Getting service list */
+	app.get("/serviceList", (req, res) => {
+		orderCollection.find({ email: req.query.email }).toArray((error, documents) => {
+			res.send(documents);
+		});
+	});
 
-    app.post('/checkingWhoYouAre' , (req, res)=>{ //---------------- checking Who You Are - admin or not
-        admin_email_collection.find({email: req.body.email})
-            .toArray((err, documents) => {
-                if(documents.length > 0){
-                    res.send({person: 'admin'})
-                }else{
-                    res.send({person: 'user'})
-                }
-            })
-    })
-
-    app.get('/getService', (req, res) => { //---------------- get all Service
-        service_collection.find({})
-            .toArray((err, documents) => {
-                res.send(documents)
-            })
-    })
-
-    app.delete('/deleteItem/:id', (req, res) => { // --------------------- admin can delete a service
-        service_collection.find({ _id: ObjectId(req.params.id) })
-            .toArray((err, documents) => {
-                if (documents.length > 0) {
-                    service_collection.deleteOne({ _id: ObjectId(req.params.id) })
-                        .then(result => {
-                            res.send(result.deletedCount > 0)
-                        })
-                }
-            })
-    })
-
-    app.get('/getAllOrder', (req, res) => { //---------------- get All Orders
-        order_collection.find({})
-            .toArray((err, documents)=>{
-                res.send(documents)
-            })
-    })
-
-    app.patch('/updateStatus', (req,res)=>{ //---------------- update Status
-        order_collection.updateOne(
-            {_id : ObjectId(req.body.id)},
-            {
-                $set: { status: req.body.newStatus},
-                $currentDate : { "lastModified": true }
-            }
-        )
-        .then(result =>{
-            res.send(result.modifiedCount > 0)
-        })
-    })
-
-
-    // ---------- API FOR USER -----------------
-
-
-    app.post('/placeOrder', (req, res) => { //----------------user place Order
-        order_collection.insertOne(req.body)
-            .then(result => {
-                res.send(result.insertedCount > 0)
-            })
-    })
-
-    app.post('/addReview', (req, res) => { //---------------- user add Review
-        review_collection.insertOne(req.body)
-            .then(result => {
-                res.send(result.insertedCount > 0)
-            })
-    })
-    app.get('/allReview', (req, res) => { //---------------- showing all user Review
-        review_collection.find({})
-            .toArray((err, documents) => {
-                res.send(documents)
-            })
-    })
-    app.post('/getOrderedItems' , (req, res) => { //---------------- get a users Ordered Items by email
-        order_collection.find({email: req.body.email})
-            .toArray((err, documents) =>{
-                res.send(documents);
-            })
-    })
-
+	/* API : get all service list */
+	app.get("/admin/serviceList", (req, res) => {
+		orderCollection.find({}).toArray((error, documents) => {
+			res.send(documents);
+		});
+	});
 });
 
+/* API : Default */
+app.get("/", (req, res) => {
+	res.send("Hello from Express, API is working 👨🏻‍💻");
+});
+
+app.listen(process.env.PORT || port);
 
 
-app.get('/', (req, res) => {
-    res.send('Creative Agency Backend Server!')
-})
 
-app.listen(process.env.PORT || port, () => {
-    console.log(`Listening at http://localhost:${port}`)
-})
+
+
 
 
 
